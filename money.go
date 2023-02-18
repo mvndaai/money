@@ -141,3 +141,20 @@ func (m *Money) UnmarshalJSON(b []byte) error {
 	m.value = ParseFloat64(f).value
 	return nil
 }
+
+// Scan implements the sql.Scanner interface
+func (m *Money) Scan(src interface{}) error {
+	if src == nil {
+		*m = ParseInt(0)
+		return nil
+	}
+
+	switch v := src.(type) {
+	case []byte:
+		pm, err := ParseString(string(v))
+		*m = pm
+		return err
+	default:
+		return fmt.Errorf("failed to scan type '%T' as Money", src)
+	}
+}
