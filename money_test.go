@@ -1,7 +1,6 @@
 package money_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -146,7 +145,7 @@ func TestParseString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, err := money.ParseString(context.Background(), tt.in)
+			m, err := money.ParseString(tt.in)
 			assert.Equal(t, tt.hasError, err != nil)
 
 			actual := m.Float64()

@@ -1,7 +1,6 @@
 package money
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -46,7 +45,7 @@ func ParseFloat64(f float64) Money {
 	return Money{value: int64(math.Round(f * multiplier))}
 }
 
-func ParseString(ctx context.Context, s string) (Money, error) {
+func ParseString(s string) (Money, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return Money{}, err
