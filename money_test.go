@@ -170,14 +170,13 @@ func TestCurrencyRound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := money.ParseFloat64(tt.value)
-			m.SetCurrencyCode(tt.currencyCode)
-			actual := m.CurrencyRound()
+			actual := m.CurrencyFloat64(tt.currencyCode)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
 }
 
-func TestString(t *testing.T) {
+func TestCurrencyString(t *testing.T) {
 	tests := []struct {
 		name         string
 		value        float64
@@ -195,8 +194,7 @@ func TestString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := money.ParseFloat64(tt.value)
-			m.SetCurrencyCode(tt.currencyCode)
-			actual := m.String()
+			actual := m.CurrencyString(tt.currencyCode)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
