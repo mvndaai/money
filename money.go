@@ -11,8 +11,7 @@ import (
 
 // Money holds a numbers with 4 decimal points of precision
 type Money struct {
-	value        int64
-	currencyCode string
+	value int64
 }
 
 const (
@@ -20,17 +19,13 @@ const (
 	multiplier      = 10000
 )
 
-func (m *Money) SetCurrencyCode(currencyCode string) {
-	m.currencyCode = strings.ToUpper(currencyCode)
-}
-
 func (m Money) Float64() float64 {
 	return float64(m.value) / multiplier
 }
 
-// CurrencyRound rounds a decimal to the correct currency precision
-func (m Money) CurrencyRound() float64 {
-	cd := CurrencyDecimals(m.currencyCode)
+// CurrencyFloat64 rounds a decimal to the correct currency precision
+func (m Money) CurrencyFloat64(currencyCode string) float64 {
+	cd := CurrencyDecimals(strings.ToUpper(currencyCode))
 	return m.roundToDecimals(cd).Float64()
 }
 
@@ -109,9 +104,14 @@ func Quo(m ...Money) Money {
 }
 
 func (m Money) String() string {
+	return m.CurrencyString("")
+}
+
+// CurrencyString returns a string rounded and formatted for a currency code
+func (m Money) CurrencyString(currencyCode string) string {
 	d := defaultDecimals
-	if m.currencyCode != "" {
-		d = CurrencyDecimals(m.currencyCode)
+	if currencyCode != "" {
+		d = CurrencyDecimals(currencyCode)
 	}
 
 	v := float64(m.roundToDecimals(d).value) / multiplier
@@ -120,8 +120,7 @@ func (m Money) String() string {
 }
 
 func (m Money) Equal(x Money) bool {
-	return m.value == x.value &&
-		m.currencyCode == x.currencyCode
+	return m.value == x.value
 }
 
 func (m Money) MarshalJSON() ([]byte, error) {
