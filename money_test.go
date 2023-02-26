@@ -27,7 +27,9 @@ func TestParseFloat64(t *testing.T) {
 		{name: "normal", in: 1.25, expected: 1.2500},
 		{name: "round down", in: 1.00004, expected: 1.0000},
 		{name: "round up", in: 1.00005, expected: 1.0001},
-		{name: "cents only", in: .00005, expected: .0001},
+		{name: "cents only", in: .000051, expected: .0001},
+		{name: "neagive ", in: -.00006, expected: -.0001},
+		{name: "roundToEven ", in: .00005, expected: .0000},
 	}
 
 	for _, tt := range tests {
@@ -46,6 +48,8 @@ func TestMul(t *testing.T) {
 		expected float64
 	}{
 		{name: "simple", in: []float64{5.0005, 5.0005}, expected: 25.0050},
+		{name: "negatives", in: []float64{5, -5}, expected: -25},
+		{name: "double negative", in: []float64{-5, -5}, expected: 25},
 		{name: "empty", in: []float64{}, expected: 0},
 		{name: "nil", in: nil, expected: 0},
 	}
@@ -64,14 +68,17 @@ func TestMul(t *testing.T) {
 
 func TestQuo(t *testing.T) {
 	tests := []struct {
-		name     string
-		in       []float64
-		expected float64
+		name        string
+		in          []float64
+		expected    float64
+		expectError bool
 	}{
 		{name: "ints", in: []float64{25, 5}, expected: 5},
 		{name: "simple", in: []float64{25.0050, 5.0005}, expected: 5.0005},
-		{name: "empty", in: []float64{}, expected: 0},
-		{name: "nil", in: nil, expected: 0},
+		{name: "negative", in: []float64{25, -5}, expected: -5},
+		{name: "empty", in: []float64{}, expected: 0, expectError: true},
+		{name: "nil", in: nil, expected: 0, expectError: true},
+		{name: "divide by 0", in: []float64{10, 0}, expected: 0, expectError: true},
 	}
 
 	for _, tt := range tests {
@@ -80,8 +87,9 @@ func TestQuo(t *testing.T) {
 			for _, v := range tt.in {
 				ms = append(ms, money.ParseFloat64(v))
 			}
-			actual := money.Quo(ms...).Float64()
-			assert.Equal(t, tt.expected, actual)
+			actual, err := money.Quo(ms...)
+			assert.Equal(t, tt.expectError, err != nil)
+			assert.Equal(t, tt.expected, actual.Float64())
 		})
 	}
 }
@@ -94,6 +102,7 @@ func TestAdd(t *testing.T) {
 	}{
 		{name: "ints", in: []float64{25, 5}, expected: 30},
 		{name: "simple", in: []float64{5.0005, 5.0005}, expected: 10.0010},
+		{name: "negative", in: []float64{10, -5}, expected: 5},
 	}
 
 	for _, tt := range tests {
@@ -116,6 +125,8 @@ func TestSub(t *testing.T) {
 	}{
 		{name: "ints", in: []float64{25, 5}, expected: 20},
 		{name: "simple", in: []float64{25.0050, 5.0005}, expected: 20.0045},
+		{name: "negative", in: []float64{25, -5}, expected: 30},
+		{name: "double negative", in: []float64{-25, -5}, expected: -20},
 		{name: "empty", in: []float64{}, expected: 0},
 		{name: "nil", in: nil, expected: 0},
 	}
@@ -187,8 +198,8 @@ func TestCurrencyString(t *testing.T) {
 		{name: "3 decmails", value: 1.2555, currencyCode: "BHD", expected: "1.256"},
 		{name: "4 decmails", value: 1.2555, currencyCode: "CLF", expected: "1.2555"},
 		{name: "4 decmails rounded input", value: 1.25555, currencyCode: "CLF", expected: "1.2556"},
-		{name: "cents only", value: 0.0050, currencyCode: "USD", expected: "0.01"},
-		{name: "cased insensitivity", value: 0.0050, currencyCode: "usD", expected: "0.01"},
+		{name: "cents only", value: 0.0051, currencyCode: "USD", expected: "0.01"},
+		{name: "cased insensitivity", value: 0.0050, currencyCode: "usD", expected: "0.00"},
 	}
 
 	for _, tt := range tests {

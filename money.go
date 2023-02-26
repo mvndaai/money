@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Money holds a numbers with 4 decimal points of precision
+// Money holds a numbers to 4 decimal points of precision
 type Money struct {
 	value int64
 }
@@ -37,7 +37,7 @@ func ParseInt64(i int64) Money {
 }
 
 func ParseFloat64(f float64) Money {
-	return Money{value: int64(math.Round(f * multiplier))}
+	return Money{value: int64(math.RoundToEven(f * multiplier))}
 }
 
 func ParseString(s string) (Money, error) {
@@ -54,7 +54,7 @@ func (m Money) roundToDecimals(decimalPlaces int) Money {
 		return m
 	}
 
-	v := math.Round(float64(m.value)/rounding) * rounding
+	v := math.RoundToEven(float64(m.value)/rounding) * rounding
 	return Money{value: int64(v)}
 }
 
@@ -86,21 +86,24 @@ func Mul(m ...Money) Money {
 		totalbf.Mul(totalbf, big.NewFloat(float64(v.value)/multiplier))
 	}
 	totalf, _ := totalbf.Float64()
-	rounded := int64(math.Round(totalf * multiplier))
+	rounded := int64(math.RoundToEven(totalf * multiplier))
 	return Money{value: rounded}
 }
 
-func Quo(m ...Money) Money {
+func Quo(m ...Money) (Money, error) {
 	if len(m) == 0 {
-		return Money{}
+		return Money{}, fmt.Errorf("no params")
 	}
 	totalbf := big.NewFloat(float64(m[0].value) / multiplier)
 	for _, v := range m[1:] {
+		if v.value == 0 {
+			return Money{}, fmt.Errorf("cannot divide by zero")
+		}
 		totalbf.Quo(totalbf, big.NewFloat(float64(v.value)/multiplier))
 	}
 	totalf, _ := totalbf.Float64()
-	rounded := int64(math.Round(totalf * multiplier))
-	return Money{value: rounded}
+	rounded := int64(math.RoundToEven(totalf * multiplier))
+	return Money{value: rounded}, nil
 }
 
 func (m Money) String() string {
