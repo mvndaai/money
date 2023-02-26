@@ -171,17 +171,20 @@ func TestCurrencyRound(t *testing.T) {
 		value        float64
 		currencyCode string
 		expected     float64
+		expectError  bool
 	}{
 		{name: "2 decmails", value: 1.2555, currencyCode: "USD", expected: 1.26},
 		{name: "3 decmails", value: 1.2555, currencyCode: "BHD", expected: 1.256},
 		{name: "4 decmails", value: 1.2555, currencyCode: "CLF", expected: 1.2555},
 		{name: "4 decmails rounded", value: 1.25555, currencyCode: "CLF", expected: 1.2556},
+		{name: "unknown code", value: 1, currencyCode: "ABC", expected: 0, expectError: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := money.ParseFloat64(tt.value)
-			actual := m.CurrencyFloat64(tt.currencyCode)
+			actual, err := m.CurrencyFloat64(tt.currencyCode)
+			assert.Equal(t, tt.expectError, err != nil)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
@@ -193,6 +196,7 @@ func TestCurrencyString(t *testing.T) {
 		value        float64
 		currencyCode string
 		expected     string
+		expectError  bool
 	}{
 		{name: "2 decmails", value: 1.2555, currencyCode: "USD", expected: "1.26"},
 		{name: "3 decmails", value: 1.2555, currencyCode: "BHD", expected: "1.256"},
@@ -200,12 +204,14 @@ func TestCurrencyString(t *testing.T) {
 		{name: "4 decmails rounded input", value: 1.25555, currencyCode: "CLF", expected: "1.2556"},
 		{name: "cents only", value: 0.0051, currencyCode: "USD", expected: "0.01"},
 		{name: "cased insensitivity", value: 0.0050, currencyCode: "usD", expected: "0.00"},
+		{name: "unknown code", value: 1, currencyCode: "ABC", expected: "", expectError: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := money.ParseFloat64(tt.value)
-			actual := m.CurrencyString(tt.currencyCode)
+			actual, err := m.CurrencyString(tt.currencyCode)
+			assert.Equal(t, tt.expectError, err != nil)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}

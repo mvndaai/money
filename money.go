@@ -6,7 +6,6 @@ import (
 	"math"
 	"math/big"
 	"strconv"
-	"strings"
 )
 
 // Money holds a numbers to 4 decimal points of precision
@@ -21,12 +20,6 @@ const (
 
 func (m Money) Float64() float64 {
 	return float64(m.value) / multiplier
-}
-
-// CurrencyFloat64 rounds a decimal to the correct currency precision
-func (m Money) CurrencyFloat64(currencyCode string) float64 {
-	cd := CurrencyDecimals(strings.ToUpper(currencyCode))
-	return m.roundToDecimals(cd).Float64()
 }
 
 func ParseInt(i int) Money {
@@ -106,24 +99,33 @@ func Quo(m ...Money) (Money, error) {
 	return Money{value: rounded}, nil
 }
 
+func (m Money) Equal(x Money) bool {
+	return m.value == x.value
+}
+
 func (m Money) String() string {
-	return m.CurrencyString("")
+	s, _ := m.CurrencyString(CurrencyCodeCLF)
+	return s
 }
 
 // CurrencyString returns a string rounded and formatted for a currency code
-func (m Money) CurrencyString(currencyCode string) string {
-	d := defaultDecimals
-	if currencyCode != "" {
-		d = CurrencyDecimals(currencyCode)
+func (m Money) CurrencyString(currencyCode string) (string, error) {
+	d, err := CurrencyDecimals(currencyCode)
+	if err != nil {
+		return "", err
 	}
-
 	v := float64(m.roundToDecimals(d).value) / multiplier
 	format := "%." + strconv.Itoa(d) + "f"
-	return fmt.Sprintf(format, v)
+	return fmt.Sprintf(format, v), nil
 }
 
-func (m Money) Equal(x Money) bool {
-	return m.value == x.value
+// CurrencyFloat64 rounds a decimal to the correct currency precision
+func (m Money) CurrencyFloat64(currencyCode string) (float64, error) {
+	cd, err := CurrencyDecimals(currencyCode)
+	if err != nil {
+		return 0, err
+	}
+	return m.roundToDecimals(cd).Float64(), nil
 }
 
 func (m Money) MarshalJSON() ([]byte, error) {
