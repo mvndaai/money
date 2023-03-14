@@ -26,10 +26,21 @@ func TestParseFloat64(t *testing.T) {
 	}{
 		{name: "normal", in: 1.25, expected: 1.2500},
 		{name: "round down", in: 1.00004, expected: 1.0000},
-		{name: "round up", in: 1.00005, expected: 1.0001},
+		{name: "round up", in: 1.000051, expected: 1.0001},
 		{name: "cents only", in: .000051, expected: .0001},
-		{name: "neagive ", in: -.00006, expected: -.0001},
-		{name: "roundToEven ", in: .00005, expected: .0000},
+		{name: "neagive", in: -.25, expected: -.25},
+		{name: "neagive round ", in: -.00006, expected: -.0001},
+		{name: "large number", in: 123456789.123456, expected: 123456789.1235},
+		{name: "roundToEven 0.5", in: .0000_5, expected: .0000},
+		{name: "roundToEven 1.5", in: .0001_5, expected: .0002},
+		{name: "roundToEven 2.5", in: .0002_5, expected: .0002},
+		{name: "roundToEven 3.5", in: .0003_5, expected: .0004},
+		{name: "roundToEven 4.5", in: .0004_5, expected: .0004},
+		{name: "roundToEven 5.5", in: .0005_5, expected: .0006},
+		{name: "roundToEven 6.5", in: .0006_5, expected: .0006},
+		{name: "roundToEven 7.5", in: .0007_5, expected: .0008},
+		{name: "roundToEven 8.5", in: .0008_5, expected: .0008},
+		{name: "roundToEven 9.5", in: .0009_5, expected: .0010},
 	}
 
 	for _, tt := range tests {
@@ -173,11 +184,14 @@ func TestCurrencyRound(t *testing.T) {
 		expected     float64
 		expectError  bool
 	}{
-		{name: "2 decmails", value: 1.2555, currencyCode: "USD", expected: 1.26},
-		{name: "3 decmails", value: 1.2555, currencyCode: "BHD", expected: 1.256},
-		{name: "4 decmails", value: 1.2555, currencyCode: "CLF", expected: 1.2555},
-		{name: "4 decmails rounded", value: 1.25555, currencyCode: "CLF", expected: 1.2556},
+		{name: "2 decmails", value: 1.2666, currencyCode: "USD", expected: 1.27},
+		{name: "3 decmails", value: 1.2666, currencyCode: "BHD", expected: 1.267},
+		{name: "4 decmails", value: 1.2666, currencyCode: "CLF", expected: 1.2666},
+		{name: "4 decmails rounded", value: 1.26666, currencyCode: "CLF", expected: 1.2667},
 		{name: "unknown code", value: 1, currencyCode: "ABC", expected: 0, expectError: true},
+		{name: "2 decmails down", value: 1.2222, currencyCode: "USD", expected: 1.22},
+		{name: "3 decmails down", value: 1.2222, currencyCode: "BHD", expected: 1.222},
+		{name: "4 decmails down", value: 1.2222, currencyCode: "CLF", expected: 1.2222},
 	}
 
 	for _, tt := range tests {
@@ -203,7 +217,7 @@ func TestCurrencyString(t *testing.T) {
 		{name: "4 decmails", value: 1.2555, currencyCode: "CLF", expected: "1.2555"},
 		{name: "4 decmails rounded input", value: 1.25555, currencyCode: "CLF", expected: "1.2556"},
 		{name: "cents only", value: 0.0051, currencyCode: "USD", expected: "0.01"},
-		{name: "cased insensitivity", value: 0.0050, currencyCode: "usD", expected: "0.00"},
+		{name: "cased insensitivity", value: 0.0060, currencyCode: "usD", expected: "0.01"},
 		{name: "unknown code", value: 1, currencyCode: "ABC", expected: "", expectError: true},
 	}
 

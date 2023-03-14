@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 )
 
 // Money holds a numbers to 4 decimal points of precision
@@ -15,22 +16,52 @@ type Money struct {
 
 const (
 	defaultDecimals = 4
-	multiplier      = 10000
 )
 
+func shift(f float64, digits int) float64 {
+	var neg string
+	if f < 0 {
+		neg = "-"
+		f = math.Abs(f)
+	}
+
+	var s string
+	if digits < 0 {
+		s = fmt.Sprintf("%s%s%f", neg, strings.Repeat("0", -1*digits), f)
+	} else {
+		s = fmt.Sprintf("%s%f", neg, f)
+	}
+
+	dLoc := strings.Index(s, ".") + digits
+	s = strings.ReplaceAll(s, ".", "")
+	s = s[0:dLoc] + "." + s[dLoc:]
+	f, _ = strconv.ParseFloat(s, 64)
+	return f
+}
+
+func shiftForUse(i int64, digits int) float64 {
+	return shift(float64(i), -1*digits)
+}
+
+func shiftForSave(f float64, digits int) int64 {
+	f = shift(f, digits)
+	f = math.RoundToEven(f)
+	return int64(f)
+}
+
 func (m Money) Float64() float64 {
-	return float64(m.value) / multiplier
+	return shiftForUse(m.value, defaultDecimals)
 }
 
 func ParseInt(i int) Money {
 	return ParseInt64(int64(i))
 }
 func ParseInt64(i int64) Money {
-	return Money{value: i * multiplier}
+	return Money{value: shiftForSave(float64(i), defaultDecimals)}
 }
 
 func ParseFloat64(f float64) Money {
-	return Money{value: int64(math.RoundToEven(f * multiplier))}
+	return Money{value: shiftForSave(f, defaultDecimals)}
 }
 
 func ParseString(s string) (Money, error) {
@@ -42,13 +73,14 @@ func ParseString(s string) (Money, error) {
 }
 
 func (m Money) roundToDecimals(decimalPlaces int) Money {
-	rounding := math.Pow10(defaultDecimals - decimalPlaces)
-	if rounding <= 1 {
+	digits := defaultDecimals - decimalPlaces
+	if digits < 1 {
 		return m
 	}
-
-	v := math.RoundToEven(float64(m.value)/rounding) * rounding
-	return Money{value: int64(v)}
+	i := shift(float64(m.value), -1*digits)
+	i = math.RoundToEven(i)
+	i = shift(i, digits)
+	return Money{value: int64(i)}
 }
 
 func Add(m ...Money) Money {
@@ -76,27 +108,27 @@ func Mul(m ...Money) Money {
 	}
 	totalbf := big.NewFloat(1)
 	for _, v := range m {
-		totalbf.Mul(totalbf, big.NewFloat(float64(v.value)/multiplier))
+		bf := big.NewFloat(shiftForUse(v.value, defaultDecimals))
+		totalbf.Mul(totalbf, bf)
 	}
 	totalf, _ := totalbf.Float64()
-	rounded := int64(math.RoundToEven(totalf * multiplier))
-	return Money{value: rounded}
+	return Money{value: shiftForSave(totalf, defaultDecimals)}
 }
 
 func Quo(m ...Money) (Money, error) {
 	if len(m) == 0 {
 		return Money{}, fmt.Errorf("no params")
 	}
-	totalbf := big.NewFloat(float64(m[0].value) / multiplier)
+	totalbf := big.NewFloat(shiftForUse(m[0].value, defaultDecimals))
 	for _, v := range m[1:] {
 		if v.value == 0 {
 			return Money{}, fmt.Errorf("cannot divide by zero")
 		}
-		totalbf.Quo(totalbf, big.NewFloat(float64(v.value)/multiplier))
+		bf := big.NewFloat(shiftForUse(v.value, defaultDecimals))
+		totalbf.Quo(totalbf, bf)
 	}
 	totalf, _ := totalbf.Float64()
-	rounded := int64(math.RoundToEven(totalf * multiplier))
-	return Money{value: rounded}, nil
+	return Money{value: shiftForSave(totalf, defaultDecimals)}, nil
 }
 
 func (m Money) Equal(x Money) bool {
@@ -114,7 +146,7 @@ func (m Money) CurrencyString(currencyCode string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	v := float64(m.roundToDecimals(d).value) / multiplier
+	v := shiftForUse(m.value, defaultDecimals)
 	format := "%." + strconv.Itoa(d) + "f"
 	return fmt.Sprintf(format, v), nil
 }
