@@ -328,3 +328,33 @@ func TestJSONStruct(t *testing.T) {
 		})
 	}
 }
+
+func TestEqualCurrencyRounded(t *testing.T) {
+	tests := []struct {
+		name          string
+		currencyCode  string
+		a             float64
+		b             float64
+		expectError   bool
+		nonRoundMatch bool
+	}{
+		{name: "exact", currencyCode: "USD", a: 0.11, b: 0.11, expectError: false, nonRoundMatch: true},
+		{name: "rounded equal", currencyCode: "USD", a: 0.1111, b: 0.1123, expectError: false, nonRoundMatch: false},
+		{name: "rounded inequal", currencyCode: "USD", a: 0.1111, b: 0.1177, expectError: true, nonRoundMatch: false},
+		{name: "bad currency code", currencyCode: "bad", a: 0, b: 0, expectError: true, nonRoundMatch: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			am := money.ParseFloat64(tt.a)
+			bm := money.ParseFloat64(tt.b)
+
+			err := am.EqualCurrencyRounded(bm, tt.currencyCode)
+			if err != nil {
+				t.Log(err)
+			}
+			assert.Equal(t, tt.expectError, err != nil)
+			assert.Equal(t, tt.nonRoundMatch, am.Equal(bm))
+		})
+	}
+}
