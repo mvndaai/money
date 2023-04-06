@@ -135,6 +135,20 @@ func (m Money) Equal(x Money) bool {
 	return m.value == x.value
 }
 
+func (m Money) EqualCurrencyRounded(x Money, currencyCode string) error {
+	cd, err := CurrencyDecimals(currencyCode)
+	if err != nil {
+		return err
+	}
+	rm := m.roundToDecimals(cd)
+	rx := x.roundToDecimals(cd)
+
+	if rm.value == rx.value {
+		return nil
+	}
+	return fmt.Errorf("rounded values do not match")
+}
+
 func (m Money) String() string {
 	s, _ := m.CurrencyString(CurrencyCodeCLF)
 	return s
