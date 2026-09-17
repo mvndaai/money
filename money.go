@@ -1,210 +1,274 @@
 package money
 
 import (
-	"encoding/json"
+	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
-	"strings"
+
+	"github.com/mvndaai/money/currencycodes"
 )
 
-// Money holds a numbers to 4 decimal points of precision
+// Money holds a an int64 representing a float to 4 decimal places of precision
+// 4 decimals is needed for some currency codes like 'UYW'
+// Floats have issues with rouunding so doing the math as an it makes it work better
+// Note: currencyCode does not get saved in the dbm it is just for rounding numbers
 type Money struct {
-	value int64
+	value        int64 // saved in ten thousandths
+	currencyCode string
 }
 
-const (
-	defaultDecimals = 4
-)
+/* Parsing */
 
-func shift(f float64, digits int) float64 {
-	var neg string
-	if f < 0 {
-		neg = "-"
-		f = math.Abs(f)
+func Parse[T number](t T, currencyCodes ...string) Money {
+	if m, ok := any(t).(Money); ok {
+		currencyCodes = append(currencyCodes, m.currencyCode)
 	}
-
-	var s string
-	if digits < 0 {
-		s = fmt.Sprintf("%s%s%f", neg, strings.Repeat("0", -1*digits), f)
-	} else {
-		s = fmt.Sprintf("%s%f", neg, f)
-	}
-
-	dLoc := strings.Index(s, ".") + digits
-	s = strings.ReplaceAll(s, ".", "")
-	s = s[0:dLoc] + "." + s[dLoc:]
-	f, _ = strconv.ParseFloat(s, 64)
-	return f
-}
-
-func shiftForUse(i int64, digits int) float64 {
-	return shift(float64(i), -1*digits)
-}
-
-func shiftForSave(f float64, digits int) int64 {
-	f = shift(f, digits)
+	f := shiftDecimals(t, savedDecimals)
+	cc := currencycodes.FirstValidCode(currencyCodes...)
 	f = math.RoundToEven(f)
-	return int64(f)
+	value := int64(f)
+	if cc != "" {
+		value = roundTenThousandths(value, currencycodes.CurrencyDecimals[cc])
+	}
+	return Money{value: value, currencyCode: cc}
 }
 
-func (m Money) Float64() float64 {
-	return shiftForUse(m.value, defaultDecimals)
+func ParseCents[T number](t T, currencyCodes ...string) Money {
+	f := shiftDecimals(t, -centsDecimals)
+	return Parse(f, currencyCodes...)
 }
 
-func ParseInt(i int) Money {
-	return ParseInt64(int64(i))
-}
-func ParseInt64(i int64) Money {
-	return Money{value: shiftForSave(float64(i), defaultDecimals)}
-}
+// Deprecated: use Parse
+func ParseBigFloat(bf big.Float, currencyCodes ...string) Money { return Parse(bf, currencyCodes...) }
 
-func ParseFloat64(f float64) Money {
-	return Money{value: shiftForSave(f, defaultDecimals)}
-}
-
-func ParseString(s string) (Money, error) {
+func ParseString(ctx context.Context, s string, currencyCodes ...string) (Money, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return Money{}, err
 	}
-	return ParseFloat64(f), nil
+	return Parse(f, currencyCodes...), nil
 }
 
-func (m Money) roundToDecimals(decimalPlaces int) Money {
-	digits := defaultDecimals - decimalPlaces
-	if digits < 1 {
+/* Manipulating
+These are package level to show that we are not manipulating the internal number
+*/
+
+func Add[T, U number](t T, u ...U) Money {
+	m := numberToMoney(t)
+	cc := m.currencyCode
+	total := m.value
+	for _, v := range u {
+		mv := numberToMoney(v)
+		if cc == "" {
+			cc = mv.currencyCode
+		}
+		total += mv.value
+	}
+	return Money{value: total, currencyCode: cc}
+}
+
+func Sub[T, U number](t T, u ...U) Money {
+	if len(u) == 0 {
+		return numberToMoney(t)
+	}
+	m := numberToMoney(t)
+	cc := m.currencyCode
+	total := m.value
+	for _, v := range u {
+		mv := numberToMoney(v)
+		if cc == "" {
+			cc = mv.currencyCode
+		}
+		total -= mv.value
+	}
+	return Money{value: total, currencyCode: cc}
+}
+
+func Mul[T, U number](t T, u ...U) Money {
+	m := numberToMoney(t)
+	if len(u) == 0 {
 		return m
 	}
-	i := shift(float64(m.value), -1*digits)
-	i = math.RoundToEven(i)
-	i = shift(i, digits)
-	return Money{value: int64(i)}
-}
-
-func Add(m ...Money) Money {
-	var total int64
-	for _, v := range m {
-		total += v.value
-	}
-	return Money{value: total}
-}
-
-func Sub(m ...Money) Money {
-	if len(m) == 0 {
-		return Money{}
-	}
-	total := m[0].value
-	for _, v := range m[1:] {
-		total -= v.value
-	}
-	return Money{value: total}
-}
-
-func Mul(m ...Money) Money {
-	if len(m) == 0 {
-		return Money{}
-	}
-	totalbf := big.NewFloat(1)
-	for _, v := range m {
-		bf := big.NewFloat(shiftForUse(v.value, defaultDecimals))
+	cc := m.currencyCode
+	totalbf := big.NewFloat(m.Float64())
+	for _, v := range u {
+		mv := numberToMoney(v)
+		if cc == "" {
+			cc = mv.currencyCode
+		}
+		bf := big.NewFloat(mv.Float64())
 		totalbf.Mul(totalbf, bf)
 	}
-	totalf, _ := totalbf.Float64()
-	return Money{value: shiftForSave(totalf, defaultDecimals)}
+	return Parse(*totalbf, cc)
 }
 
-func Quo(m ...Money) (Money, error) {
-	if len(m) == 0 {
-		return Money{}, fmt.Errorf("no params")
+func Quo[T, U number](t T, u ...U) (Money, error) {
+	m := numberToMoney(t)
+	if len(u) == 0 {
+		return m, nil
 	}
-	totalbf := big.NewFloat(shiftForUse(m[0].value, defaultDecimals))
-	for _, v := range m[1:] {
-		if v.value == 0 {
-			return Money{}, fmt.Errorf("cannot divide by zero")
+	cc := m.currencyCode
+
+	totalbf := big.NewFloat(m.Float64())
+	for _, v := range u {
+		mv := numberToMoney(v)
+		if cc == "" {
+			cc = mv.currencyCode
 		}
-		bf := big.NewFloat(shiftForUse(v.value, defaultDecimals))
+		if mv.value == 0 {
+			return Money{}, errors.New("cannot divide by zero")
+		}
+		bf := big.NewFloat(mv.Float64())
 		totalbf.Quo(totalbf, bf)
 	}
-	totalf, _ := totalbf.Float64()
-	return Money{value: shiftForSave(totalf, defaultDecimals)}, nil
+	return Parse(totalbf, cc), nil
 }
 
-func (m Money) Equal(x Money) bool {
-	return m.value == x.value
+func Negate[T number](t T) Money {
+	m := numberToMoney(t)
+	m.value = -m.value
+	return m
 }
 
-func (m Money) EqualCurrencyRounded(x Money, currencyCode string) error {
-	cd, err := CurrencyDecimals(currencyCode)
-	if err != nil {
-		return err
+func Abs[T number](t T) Money {
+	m := numberToMoney(t)
+	if m.IsNegative() {
+		return Negate(m)
 	}
-	rm := m.roundToDecimals(cd)
-	rx := x.roundToDecimals(cd)
+	return m
+}
 
-	if rm.value == rx.value {
-		return nil
+func Percentage[N, P number](num N, percentage P) Money {
+	f := shiftDecimals(percentage, -2)
+	return Mul(num, f)
+}
+
+func Max[T, U number](a T, b U) Money {
+	am := numberToMoney(a)
+	if am.Cmp(b) >= 0 {
+		return am
 	}
-	return fmt.Errorf("rounded values do not match")
+	bm := numberToMoney(b)
+	if am.currencyCode != "" {
+		bm.currencyCode = am.currencyCode
+	}
+	return bm
+}
+
+func Min[T, U number](a T, b U) Money {
+	am := numberToMoney(a)
+	if am.Cmp(b) <= 0 {
+		return am
+	}
+	bm := numberToMoney(b)
+	if am.currencyCode != "" {
+		bm.currencyCode = am.currencyCode
+	}
+	return bm
+}
+
+func roundTenThousandths(tenThousandths int64, decimalPlaces int) int64 {
+	if decimalPlaces < 0 {
+		return tenThousandths
+	}
+	digits := savedDecimals - decimalPlaces
+	if digits < 1 || digits > savedDecimals {
+		return tenThousandths
+	}
+	i := shiftDecimals(tenThousandths, -digits)
+	i = math.RoundToEven(i)
+	return int64(shiftDecimals(i, digits))
+}
+
+func RoundToDecimals[T number](t T, decimalPlaces int) Money {
+	m := numberToMoney(t)
+	if m.currencyCode != "" && (currencycodes.CurrencyDecimals[m.currencyCode] <= decimalPlaces) {
+		return m // already smallser than what we are rounding to
+	}
+	return Money{
+		value:        roundTenThousandths(m.value, decimalPlaces),
+		currencyCode: m.currencyCode,
+	}
+}
+
+/* Comparing */
+
+// Cmp compares returns:
+//
+//	-1 if m <  y
+//	 0 if m == y
+//	+1 if m >  y
+func (m Money) Cmp[T number](y T) int {
+	return cmp.Compare(m.value, numberToMoney(y).value)
+}
+
+func (m Money) IsEqual[T number](x T) bool {
+	return m.value == numberToMoney(x).value
+}
+
+func (m Money) IsZero() bool {
+	return m.value == 0
+}
+
+func (m Money) IsPositive() bool {
+	return m.value > 0
+}
+
+func (m Money) IsNegative() bool {
+	return m.value < 0
+}
+
+/* Exporting */
+
+func (m Money) Float64() float64 {
+	return shiftDecimals(m.value, -savedDecimals)
+}
+
+func (m Money) Cents() int {
+	f := m.Float64()
+	f = shiftDecimals(f, centsDecimals)
+	f = math.RoundToEven(f)
+	return int(f)
 }
 
 func (m Money) String() string {
-	s, _ := m.CurrencyString(CurrencyCodeCLF)
-	return s
+	return m.StringDecimals(currencycodes.BestDecimal(m.currencyCode))
 }
 
-// CurrencyString returns a string rounded and formatted for a currency code
-func (m Money) CurrencyString(currencyCode string) (string, error) {
-	d, err := CurrencyDecimals(currencyCode)
-	if err != nil {
-		return "", err
-	}
-	v := shiftForUse(m.value, defaultDecimals)
-	format := "%." + strconv.Itoa(d) + "f"
-	return fmt.Sprintf(format, v), nil
+// StringDecimals rounds to the correct precision then returns the string limited to the number of decimals
+func (m Money) StringDecimals(decimals int) string {
+	v := RoundToDecimals(m, decimals).Float64()
+	return fmt.Sprintf("%.*f", decimals, v)
 }
 
-// CurrencyFloat64 rounds a decimal to the correct currency precision
-func (m Money) CurrencyFloat64(currencyCode string) (float64, error) {
-	cd, err := CurrencyDecimals(currencyCode)
-	if err != nil {
-		return 0, err
+/* Export with currency code */
+
+func (m *Money) CurrencySet(currencyCodes ...string) {
+	if m == nil {
+		return
 	}
-	return m.roundToDecimals(cd).Float64(), nil
+	m.currencyCode = currencycodes.FirstValidCode(currencyCodes...)
+	if m.currencyCode != "" {
+		m.value = roundTenThousandths(m.value, currencycodes.CurrencyDecimals[m.currencyCode])
+	}
 }
 
-func (m Money) MarshalJSON() ([]byte, error) {
-	return json.Marshal(m.String())
+func (m Money) CurrencyGet() string {
+	return m.currencyCode
 }
 
-func (m *Money) UnmarshalJSON(b []byte) error {
-	var n json.Number
-	err := json.Unmarshal(b, &n)
-	if err != nil {
-		return err
-	}
-	f, err := n.Float64()
-	if err != nil {
-		return err // unreachable
-	}
-	m.value = ParseFloat64(f).value
-	return nil
+// StringCurrencyCode returns a string rounded and truncated to the decimals of the currency code indicated with fallbacks if incorrect
+func (m Money) StringCurrencyCode(currencyCodes ...string) string {
+	d := currencycodes.BestDecimal(currencyCodes...)
+	return m.StringDecimals(d)
 }
 
-// Scan implements the sql.Scanner interface
-func (m *Money) Scan(src interface{}) error {
-	if src == nil {
-		*m = ParseInt(0)
-		return nil
-	}
-
-	switch v := src.(type) {
-	case []byte:
-		pm, err := ParseString(string(v))
-		*m = pm
-		return err
-	default:
-		return fmt.Errorf("failed to scan type '%T' as Money", src)
-	}
+// Float64CurrencyCode rounds a decimal to the correct currency precision
+func (m Money) Float64CurrencyCode(currencyCodes ...string) float64 {
+	d := currencycodes.BestDecimal(currencyCodes...)
+	return RoundToDecimals(m, d).Float64()
 }
